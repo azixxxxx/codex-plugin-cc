@@ -698,6 +698,26 @@ test("session start hook exports the Claude session id, transcript path, and plu
   );
 });
 
+test("session start hook does not repeat its exports on resume or compaction", () => {
+  const repo = makeTempDir();
+  const envFile = path.join(makeTempDir(), "claude-env.sh");
+  fs.writeFileSync(envFile, "export OTHER_PLUGIN=1", "utf8");
+  const pluginDataDir = makeTempDir();
+  const input = JSON.stringify({ hook_event_name: "SessionStart", session_id: "sess-current", transcript_path: path.join(repo, "s.jsonl"), cwd: repo });
+  const env = { ...process.env, CLAUDE_ENV_FILE: envFile, CLAUDE_PLUGIN_DATA: pluginDataDir };
+
+  // SessionStart runs again on resume and after compaction.
+  for (let start = 0; start < 3; start += 1) {
+    const result = run("node", [SESSION_HOOK, "SessionStart"], { cwd: repo, env, input });
+    assert.equal(result.status, 0, result.stderr);
+  }
+
+  const lines = fs.readFileSync(envFile, "utf8").trim().split("\n");
+  assert.equal(lines.length, 4, lines.join("\n"));
+  assert.equal(lines[0], "export OTHER_PLUGIN=1");
+  assert.equal(new Set(lines).size, lines.length);
+});
+
 test("write task output focuses on the Codex result without generic follow-up hints", () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
